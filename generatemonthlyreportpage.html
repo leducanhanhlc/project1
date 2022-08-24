@@ -1,0 +1,10 @@
+{% from "_formhelpers.html" import render_field %}
+<form method="post">
+  {{ form.csrf_token }}
+  <dl>
+    {{ render_field(form.text_field) }}
+    {{ render_field(form.date_field_1) }}
+    {{ render_field(form.date_field_2) }}
+  </dl>
+  <p><input type=submit value="Generate Monthly Report">
+</form>
