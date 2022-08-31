@@ -1,9 +1,15 @@
-from flask import Flask, redirect, url_for, render_template, request, flash, send_file, session
+from flask import Flask, redirect, url_for, render_template, request, flash, send_file, session, Response
 from wtforms import Form, DateField, StringField, validators
 import requests
 from fpdf import FPDF
 from flask_sqlalchemy import SQLAlchemy
+from subprocess import Popen, PIPE
+import shlex
+import time
 
+HISBOTProgress = 0
+
+#Define pdf file name
 pdf_file_name = 'output.pdf'
 
 #Init Flask
@@ -29,6 +35,41 @@ class FormUseToGenerateMonthlyReport(Form):
     date_field_1 = DateField('Date Field 1', [validators.InputRequired()])
     date_field_2 = DateField('Date Field 2', [validators.InputRequired()])
 
+#Run HISBot
+def processHISBot():
+    global HISBOTProgress
+    print("HISBOT Running")
+    session = Popen(['python3', 'HISBot.py'], stdout=PIPE, stderr=PIPE)
+    while True:
+        realtime_output = session.stdout.readline()
+
+        if realtime_output.strip().decode('utf-8') == '' and session.poll() is not None:
+            break
+
+        if realtime_output:
+            HISBOTProgress=realtime_output.strip().decode('utf-8')
+            #if(HISBOTProgress != ""):
+             #   print(int(HISBOTProgress)*10)
+            if(realtime_output.strip().decode('utf-8') != ""):
+                print("HISBOT process: " + realtime_output.strip().decode('utf-8') + "/10", flush=True)
+
+#HISBot progress realtime update   
+@app.route('/progress')
+def progress():
+	    def generate():
+                global HISBOTProgress
+                #print("dasd")
+                #print(HISBOTProgress)
+                x = 0
+                while HISBOTProgress != "":
+                        #print("dasdasd")
+                        x = int(HISBOTProgress) * 10
+                        #print(x)
+                        yield "data:" + str(x) + "\n\n"
+                        time.sleep(0.5)
+
+	    return Response(generate(), mimetype= 'text/event-stream')
+
 #Create homepage route
 @app.route("/", methods=['GET', 'POST'])
 #Callback function
@@ -36,12 +77,16 @@ def report():
     if session.get('logged_in'):
         form = FormUseToGenerateMonthlyReport()
         if request.method == 'POST':
+            #run HISBOT
+            processHISBot()
             #Generate monthly report pdf file
             generate_pdf_file(request.form["text_field"], request.form["date_field_1"], request.form["date_field_2"])
             #flash('Thanks for registering')
             #Send monthly report pdf file to client. Client will download this file.
-            return send_file(pdf_file_name, mimetype='application/force-download')
-        return render_template('generatemonthlyreportpage.html', form=form)
+            #TODO: allow download file
+            #send_file(pdf_file_name, mimetype='application/force-download')
+            return send_file(pdf_file_name, mimetype='application/pdf')
+        return render_template('generatemonthlyreportpage.html', form=form, progress = HISBOTProgress)
     else:
         return render_template('index.html', message="Hello!")
     
